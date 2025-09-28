@@ -51,13 +51,13 @@ jobs:
         # 2. Añade la Toolchain a PATH para que se reconozca globalmente
         export PATH=$(pwd)/toolchain/aarch64-linux-android/bin:$PATH
         
-    - name: Arreglar el Makefile Faltante
+    - name: Usar Makefile Propio (Eliminar Descarga Externa)
+      # Este paso reemplaza la descarga externa que fallaba (404)
+      # Ahora confiamos en el Makefile que subiste con tu codigo fuente.
       run: |
-        # Descarga el Makefile principal de Linux v5.15 para que make pueda iniciar
-        rm -f Makefile
-        # Usaremos un Makefile mas antiguo y generico para evitar los errores de compatibilidad.
-        wget -O Makefile https://raw.githubusercontent.com/android/kernel/android-5.15/Makefile
-        
+        echo "Usando el Makefile local del kernel subido."
+        # No se necesita ningun comando si ya existe el Makefile en la raiz.
+
     - name: Crear Archivo de Configuración Básico (.config)
       run: |
         # Crear la carpeta de salida (O=out) y el archivo .config
@@ -70,10 +70,10 @@ jobs:
         echo "CONFIG_DEFCONFIG_LIST=/dev/null" >> .config
 
     - name: Compilación del Kernel
-      # Ejecuta la compilacion con la configuracion basica y la inclusion del header que ya corregimos
+      # Ejecuta la compilacion con las banderas necesarias (CLANG=1 y correccion de headers)
       run: |
-        # Añadir banderas para que encuentre los headers y desactivar modulos de advertencia.
-        make O=out ARCH=arm64 -j$(nproc) KCFLAGS='-I$(PWD)/arch/arm64/include/generated/uapi -I$(PWD)/include/uapi'
+        # CLANG=1 es CRITICO para que el Makefile sepa usar la toolchain de Android NDK.
+        make O=out ARCH=arm64 -j$(nproc) CLANG=1 KCFLAGS='-I$(PWD)/arch/arm64/include/generated/uapi -I$(PWD)/include/uapi'
         
     - name: Empaquetar y Subir Archivos de Salida
       uses: actions/upload-artifact@v4
