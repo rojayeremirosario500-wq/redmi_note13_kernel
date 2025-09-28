@@ -72,7 +72,9 @@ jobs:
 
     - name: Compilación del Kernel
       # Ejecuta la compilacion usando todos los nucleos disponibles (-j$(nproc))
-      run: make O=out ARCH=arm64 -j$(nproc)
+      run: |
+        # Añadir banderas para que encuentre los headers de la arquitectura ARM64 que estan rotos
+        make O=out ARCH=arm64 -j$(nproc) KCFLAGS='-I$(PWD)/arch/arm64/include/generated/uapi -I$(PWD)/include/uapi'
 
     - name: Empaquetar y Subir Archivos de Salida
       uses: actions/upload-artifact@v4
