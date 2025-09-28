@@ -57,13 +57,18 @@ jobs:
         rm -f Makefile
         wget -O Makefile https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/Makefile?h=v5.15
         
-    - name: Forzar Creación de Directorios y Configuración
+    - name: Crear Archivo de Configuración Básico (.config)
       run: |
-        # ESTE ES EL PASO CORREGIDO: CREA LOS DIRECTORIOS FALTANTES
-        mkdir -p arch/arm64/configs
+        # Crear la carpeta de salida (O=out) y el archivo .config
+        mkdir -p out
         
-        # Ejecuta la configuracion
-        make O=out ARCH=arm64 msm_defconfig
+        # Este paso REEMPLAZA a msm_defconfig. 
+        # Creamos un archivo .config minimo requerido para que el make arranque.
+        # Esto nos lleva al siguiente error de compilacion (que es normal).
+        echo "CONFIG_ARCH_MSM=y" > .config
+        echo "CONFIG_ARM64=y" >> .config
+        echo "CONFIG_MODULES=y" >> .config
+        echo "CONFIG_DEFCONFIG_LIST=/dev/null" >> .config
 
     - name: Compilación del Kernel
       # Ejecuta la compilacion usando todos los nucleos disponibles (-j$(nproc))
