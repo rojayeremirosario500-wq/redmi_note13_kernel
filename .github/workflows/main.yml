@@ -1,0 +1,75 @@
+name: Compilar Kernel 5.15 ZEPHYR
+
+on:
+  # Permite ejecutarlo manualmente desde la pestana Actions
+  workflow_dispatch:
+  # Ejecuta al subir cambios a la rama 'main'
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Instalar Dependencias del Sistema
+      run: sudo apt update && sudo apt install -y git build-essential bison flex libssl-dev libncurses5-dev wget unzip
+
+    # --- PASO CRITICO: DESCARGA AUTOMATICA DEL TOOLCHAIN ---
+    - name: Descargar Toolchain de Google (Clang NDK r25c)
+      run: |
+        # Definimos el directorio donde estara la toolchain (como si la hubieras subido)
+        TOOLCHAIN_DIR="toolchain/aarch64-linux-android"
+        mkdir -p "$TOOLCHAIN_DIR/bin"
+        
+        # URL de la Toolchain oficial de Android NDK (Clang)
+        TOOLCHAIN_URL="https://dl.google.com/android/repository/android-ndk-r25c-linux.zip"
+        
+        echo "Descargando NDK r25c..."
+        wget -O ndk.zip $TOOLCHAIN_URL
+        
+        echo "Descomprimiendo NDK (Esto tarda ~1 min)..."
+        unzip -q ndk.zip -d ndk_temp
+        
+        # Mover los archivos binarios del compilador a la ruta esperada
+        # La ruta del NDK es profunda, movemos solo los binarios
+        mv ndk_temp/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/* "$TOOLCHAIN_DIR/bin"
+        
+        # Limpiar archivos temporales
+        rm -rf ndk_temp ndk.zip
+    
+    # --- CONFIGURACION Y COMPILACION ---
+    - name: Definir Entorno y Preparar Toolchain
+      run: |
+        export ARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-android-
+        # 1. Crear un enlace simbolico para que 'make' encuentre el compilador por su nombre clasico
+        ln -s $(pwd)/toolchain/aarch64-linux-android/bin/clang $(pwd)/toolchain/aarch64-linux-android/bin/aarch64-linux-android-gcc
+        
+        # 2. Añade la Toolchain a PATH para que se reconozca globalmente
+        export PATH=$(pwd)/toolchain/aarch64-linux-android/bin:$PATH
+        
+    - name: Arreglar el Makefile Faltante
+      run: |
+        # Descarga el Makefile principal de Linux v5.15 para que make pueda iniciar
+        rm -f Makefile
+        wget -O Makefile https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/Makefile?h=v5.15
+
+    - name: Configuración del Kernel (msm_defconfig)
+      # Esto genera el archivo .config usando la configuracion base de Qualcomm
+      run: make O=out ARCH=arm64 msm_defconfig
+
+    - name: Compilación del Kernel
+      # Ejecuta la compilacion usando todos los nucleos disponibles (-j$(nproc))
+      run: make O=out ARCH=arm64 -j$(nproc)
+
+    - name: Empaquetar y Subir Archivos de Salida
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel_ZEPHYR_Compilado
+        # Buscamos los archivos principales del kernel compilado
+        path: out/arch/arm64/boot/*
+        if-no-files-found: warn
