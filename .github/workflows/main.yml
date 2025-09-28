@@ -51,6 +51,10 @@ jobs:
         # 2. Añade la Toolchain a PATH para que se reconozca globalmente
         export PATH=$(pwd)/toolchain/aarch64-linux-android/bin:$PATH
         
+    - name: Entrar al Directorio del Kernel
+      # CRITICO: Movemos el shell al directorio real del codigo fuente (donde esta el Makefile)
+      run: cd kernel_msm-5.15-ZEPHYR-1.0
+      
     - name: Usar Makefile Propio (Eliminar Descarga Externa)
       # Este paso reemplaza la descarga externa que fallaba (404)
       # Ahora confiamos en el Makefile que subiste con tu codigo fuente.
@@ -71,6 +75,7 @@ jobs:
 
     - name: Compilación del Kernel
       # Ejecuta la compilacion con las banderas necesarias (CLANG=1 y correccion de headers)
+      # El comando 'make' ahora se ejecuta DENTRO del directorio 'kernel_msm-5.15-ZEPHYR-1.0'
       run: |
         # CLANG=1 es CRITICO para que el Makefile sepa usar la toolchain de Android NDK.
         make O=out ARCH=arm64 -j$(nproc) CLANG=1 KCFLAGS='-I$(PWD)/arch/arm64/include/generated/uapi -I$(PWD)/include/uapi'
