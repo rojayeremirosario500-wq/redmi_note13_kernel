@@ -11,6 +11,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # --- DEFINIMOS EL DIRECTORIO RAIZ DEL CODIGO FUENTE DEL KERNEL ---
+    # Usamos la carpeta 'kernel-msm-5.15' que encontramos en el repositorio de origen.
+    env:
+      KERNEL_SOURCE_DIR: kernel-msm-5.15
+
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
@@ -52,11 +57,12 @@ jobs:
         export PATH=$(pwd)/toolchain/aarch64-linux-android/bin:$PATH
         
     - name: Usar Makefile Propio (Eliminar Descarga Externa)
-      # Ahora confiamos en el Makefile que subiste con tu codigo fuente, asumiendo que esta en la raiz.
       run: |
-        echo "Usando el Makefile local del kernel subido en la raiz del repositorio."
+        echo "Usando el Makefile local dentro de $KERNEL_SOURCE_DIR."
 
+    # Usamos 'working-directory' para forzar que los comandos de 'make' se ejecuten dentro de la carpeta del kernel
     - name: Crear Archivo de Configuración Básico (.config)
+      working-directory: ${{ env.KERNEL_SOURCE_DIR }}
       run: |
         # Crear la carpeta de salida (O=out) y el archivo .config
         mkdir -p out
@@ -68,8 +74,8 @@ jobs:
         echo "CONFIG_DEFCONFIG_LIST=/dev/null" >> .config
 
     - name: Compilación del Kernel
+      working-directory: ${{ env.KERNEL_SOURCE_DIR }}
       # Ejecuta la compilacion con las banderas necesarias (CLANG=1 y correccion de headers)
-      # Ahora se ejecuta en la RAIZ del repositorio, donde 'make' espera el Makefile.
       run: |
         # CLANG=1 es CRITICO para que el Makefile sepa usar la toolchain de Android NDK.
         make O=out ARCH=arm64 -j$(nproc) CLANG=1 KCFLAGS='-I$(PWD)/arch/arm64/include/generated/uapi -I$(PWD)/include/uapi'
@@ -78,6 +84,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Kernel_ZEPHYR_Compilado
-        # Buscamos los archivos principales del kernel compilado
-        path: out/arch/arm64/boot/*
+        # Buscamos los archivos principales del kernel compilado DENTRO de la carpeta fuente
+        path: ${{ env.KERNEL_SOURCE_DIR }}/out/arch/arm64/boot/*
         if-no-files-found: warn
