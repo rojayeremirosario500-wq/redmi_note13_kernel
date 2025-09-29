@@ -1,50 +1,38 @@
-name: Compilar Kernel 5.15 ZEPHYR
-
-on:
-  # Permite ejecutarlo manualmente desde la pestana Actions
-  workflow_dispatch:
-  # Ejecuta al subir cambios a la rama 'main'
-  push:
-    branches: [ "main" ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-    # 1. Checkout del codigo fuente (el tuyo, en la raiz)
-    - name: Checkout Code
-      uses: actions/checkout@v4
-      
-    # 2. Uso de la accion de compilacion del creador del kernel
-    - name: Usar Kernel Builder para Compilar
-      uses: topnotchfreaks/kernel-builder@main
-      with:
-        # Tu codigo fuente esta en la raiz del repo (./)
-        kernel_source_url: './'
+[Immersive content redacted for brevity.]
+    - name: Definir Entorno y Preparar Toolchain
+      run: |
+        export ARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-android-
+        # 1. Crear un enlace simbolico para que 'make' encuentre el compilador por su nombre clasico
+        ln -s $(pwd)/toolchain/aarch64-linux-android/bin/clang $(pwd)/toolchain/aarch64-linux-android/bin/aarch64-linux-android-gcc
         
-        # Le indicamos que branch usar, aunque al ser local es irrelevante
-        kernel_branch: main
+        # 2. Añade la Toolchain a PATH para que se reconozca globalmente
+        export PATH=$(pwd)/toolchain/aarch64-linux-android/bin:$PATH
         
-        # Le indicamos el defconfig que debe usar para el Redmi Note 13
-        # Asumo que es 'msm_defconfig', si falla, es el primer valor que cambiaremos.
-        device: msm_defconfig
+    # --- PASO CRITICO: USAR EL BUILDER DEL CREADOR ---
+    - name: Integrar y Ejecutar Builder de Topnotchfreaks
+      run: |
+        # 1. Clonar el repositorio del builder a una carpeta temporal
+        git clone https://github.com/topnotchfreaks/kernel-msm-5.15 builder_scripts
         
-        # Configuracion de la toolchain (Clang/LLVM)
-        toolchain_url: 'https://github.com/crdroid-r/clang/releases/download/17.0.6-20240315/clang-r510526-android-17-06.tar.gz'
-        toolchain_path: toolchain/clang
+        # 2. Copiar los scripts de compilacion necesarios a la raiz de tu repo (donde estan los archivos del kernel)
+        cp builder_scripts/build.sh .
+        cp builder_scripts/build-config.sh .
         
-        # Banderas de compilacion para forzar CLANG
-        compiler: clang
+        # 3. Dar permisos de ejecucion
+        chmod +x build.sh
         
-        # Optimizacion de enlace (si el kernel lo soporta)
-        lto_mode: thin
-
-    # 3. Empaquetar y Subir Archivos de Salida
+        # 4. EJECUTAR EL SCRIPT DE COMPILACION
+        # El script necesita el nombre del defconfig como argumento.
+        echo "Ejecutando build.sh con msm_defconfig..."
+        bash ./build.sh msm_defconfig
+        
+        # El script del creador deberia generar la salida en una carpeta con formato especifico.
+        
     - name: Empaquetar y Subir Archivos de Salida
       uses: actions/upload-artifact@v4
       with:
         name: Kernel_ZEPHYR_Compilado
-        # La accion de compilacion guarda el zip final en el directorio raiz
-        path: "*.zip"
+        # Buscamos la salida generada por el script 'build.sh' (es una suposicion, si falla, cambiamos la ruta)
+        path: out/arch/arm64/boot/*
         if-no-files-found: warn
