@@ -1,4 +1,4 @@
-name: Compilar Kernel 5.15 ZEPHYR - DIAGNÓSTICO DE CARPETA
+name: Compilar Kernel 5.15 ZEPHYR
 
 on:
   # Permite ejecutarlo manualmente desde la pestana Actions
@@ -11,22 +11,71 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # --- DEFINIMOS EL DIRECTORIO RAIZ DEL CODIGO FUENTE DEL KERNEL ---
-    # Lo dejamos para rellenarlo despues, pero ahora no se usa.
-    env:
-      KERNEL_SOURCE_DIR: TBD
+    # Eliminamos KERNEL_SOURCE_DIR y trabajamos en la raiz.
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
       
     - name: Instalar Dependencias del Sistema
-      run: sudo apt update && sudo apt install -y git
+      run: sudo apt update && sudo apt install -y git build-essential bison flex libssl-dev libncurses5-dev wget unzip
 
-    # --- PASO CRITICO: DIAGNÓSTICO ---
-    - name: Listar Contenido del Repositorio (DIME ESTO)
+    # --- PASO CRITICO: DESCARGA AUTOMATICA DEL TOOLCHAIN ---
+    - name: Descargar Toolchain de Google (Clang NDK r25c)
       run: |
-        echo "Contenido del directorio actual (el raiz del repo):"
-        ls -F
-        echo "----------------------------------------------------"
-        echo "Si ves una carpeta del kernel, por favor, dime el nombre EXACTO."
+        # Definimos el directorio donde estara la toolchain (como si la hubieras subido)
+        TOOLCHAIN_DIR="toolchain/aarch64-linux-android"
+        mkdir -p "$TOOLCHAIN_DIR/bin"
+        
+        # URL de la Toolchain oficial de Android NDK (Clang)
+        TOOLCHAIN_URL="https://dl.google.com/android/repository/android-ndk-r25c-linux.zip"
+        
+        echo "Descargando NDK r25c..."
+        wget -O ndk.zip $TOOLCHAIN_URL
+        
+        echo "Descomprimiendo NDK (Esto tarda ~1 min)..."
+        unzip -q ndk.zip -d ndk_temp
+        
+        # Mover los archivos binarios del compilador a la ruta esperada
+        mv ndk_temp/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/* "$TOOLCHAIN_DIR/bin"
+        
+        # Limpiar archivos temporales
+        rm -rf ndk_temp ndk.zip
+    
+    # --- CONFIGURACION Y COMPILACION (TODO EN LA RAIZ) ---
+    - name: Definir Entorno y Preparar Toolchain
+      run: |
+        export ARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-android-
+        # 1. Crear un enlace simbolico para que 'make' encuentre el compilador por su nombre clasico
+        ln -s $(pwd)/toolchain/aarch64-linux-android/bin/clang $(pwd)/toolchain/aarch64-linux-android/bin/aarch64-linux-android-gcc
+        
+        # 2. Añade la Toolchain a PATH para que se reconozca globalmente
+        export PATH=$(pwd)/toolchain/aarch64-linux-android/bin:$PATH
+        
+    - name: Crear Archivo de Configuración Básico (.config)
+      # Se ejecuta en la raiz donde esta el Makefile.
+      run: |
+        # Crear la carpeta de salida (O=out) y el archivo .config
+        mkdir -p out
+        
+        # Creamos un archivo .config minimo requerido para saltar el defconfig faltante.
+        echo "CONFIG_ARCH_MSM=y" > .config
+        echo "CONFIG_ARM64=y" >> .config
+        echo "CONFIG_MODULES=y" >> .config
+        echo "CONFIG_DEFCONFIG_LIST=/dev/null" >> .config
+
+    - name: Compilación del Kernel
+      # Se ejecuta en la raiz. Esta es la ejecucion CRITICA.
+      run: |
+        # CLANG=1 es CRITICO para que el Makefile sepa usar la toolchain de Android NDK.
+        # KCFLAGS son las banderas para arreglar la busqueda de headers.
+        make O=out ARCH=arm64 -j$(nproc) CLANG=1 KCFLAGS='-I$(PWD)/arch/arm64/include/generated/uapi -I$(PWD)/include/uapi'
+        
+    - name: Empaquetar y Subir Archivos de Salida
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel_ZEPHYR_Compilado
+        # Buscamos los archivos principales del kernel compilado en la raiz/out
+        path: out/arch/arm64/boot/*
+        if-no-files-found: warn
